@@ -21,7 +21,7 @@ input_mode = st.radio("Pilih salah satu:", ["📝 Input Manual", "📁 Upload Fi
 wib = pytz.timezone("Asia/Jakarta")
 now_wib = datetime.now(wib)
 
-# === Mapping label dan warna ===
+# === Mapping label dan warna (untuk visualisasi) ===
 label_map = {'positive': 'Positif', 'negative': 'Negatif'}
 color_map = {'Positif': 'blue', 'Negatif': 'red'}
 
@@ -47,18 +47,17 @@ if input_mode == "📝 Input Manual":
             vec = vectorizer.transform([user_review])
             pred = model.predict(vec)
             label = label_encoder.inverse_transform(pred)[0]
-            label_bahasa = label_map.get(label, 'Tidak Dikenal')
 
             result_df = pd.DataFrame([{
                 "name": name if name else "(Anonim)",
                 "star_rating": star_rating,
                 "date": review_date_str,
                 "review": user_review,
-                "predicted_sentiment": label_bahasa
+                "predicted_sentiment": label
             }])
 
-            st.success(f"✅ Sentimen terdeteksi: **{label_bahasa.upper()}**")
-            st.dataframe(result_df)
+            st.success(f"✅ Sentimen terdeteksi: **{label.upper()}**")
+            st.dataframe(result_df, use_container_width=True, height=200)
 
             csv_manual = result_df.to_csv(index=False).encode('utf-8')
             st.download_button(
@@ -88,7 +87,6 @@ else:
                 X_vec = vectorizer.transform(df['review'].fillna(""))
                 y_pred = model.predict(X_vec)
                 df['predicted_sentiment'] = label_encoder.inverse_transform(y_pred)
-                df['sentimen_bahasa'] = df['predicted_sentiment'].map(label_map)
 
                 st.success("✅ Prediksi berhasil!")
 
@@ -102,11 +100,16 @@ else:
 
                 filtered_df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
 
-                st.dataframe(filtered_df[['name', 'star_rating', 'date', 'review', 'sentimen_bahasa']].head())
+                st.dataframe(
+                    filtered_df[['name', 'star_rating', 'date', 'review', 'predicted_sentiment']],
+                    use_container_width=True,
+                    height=400
+                )
 
                 # === Bar Chart ===
                 st.subheader("📊 Distribusi Sentimen – Diagram Batang: Kala: Learn Ukulele & Tuner")
-                bar_data = filtered_df['sentimen_bahasa'].value_counts().reset_index()
+                sentimen_bahasa = filtered_df['predicted_sentiment'].map(label_map)
+                bar_data = sentimen_bahasa.value_counts().reset_index()
                 bar_data.columns = ['Sentimen', 'Jumlah']
                 colors = [color_map.get(sent, 'gray') for sent in bar_data['Sentimen']]
 
@@ -125,11 +128,11 @@ else:
 
                 # === Pie Chart ===
                 st.subheader("🧁 Distribusi Sentimen – Diagram Pai: Kala: Learn Ukulele & Tuner")
-                pie_data = filtered_df['sentimen_bahasa'].value_counts()
+                pie_data = sentimen_bahasa.value_counts()
                 pie_colors = [color_map.get(sent, 'gray') for sent in pie_data.index]
 
                 def autopct_format(pct, allvals):
-                    absolute = int(round(pct/100.*sum(allvals)))
+                    absolute = int(round(pct / 100. * sum(allvals)))
                     return f"{pct:.1f}%\n({absolute})"
 
                 fig_pie, ax_pie = plt.subplots()
@@ -151,5 +154,6 @@ else:
                     file_name="hasil_prediksi_learn_uke_kala.csv",
                     mime="text/csv"
                 )
+
         except Exception as e:
             st.error(f"❌ Terjadi kesalahan saat membaca file: {e}")
