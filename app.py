@@ -6,7 +6,7 @@ import pytz
 from datetime import datetime
 
 # === Load model dan komponen ===
-model = joblib.load('Gradient_Boosting_SMOTE_model_Learn Uke Kala.pkl')
+model = joblib.load('Linear_SVM_Original_model_Learn Uke Kala.pkl')
 vectorizer = joblib.load('tfidf_vectorizer_Learn Uke Kala.pkl')
 label_encoder = joblib.load('label_encoder_Learn Uke Kala.pkl')
 
@@ -21,7 +21,7 @@ input_mode = st.radio("Pilih salah satu:", ["📝 Input Manual", "📁 Upload Fi
 wib = pytz.timezone("Asia/Jakarta")
 now_wib = datetime.now(wib)
 
-# === Mapping label dan warna (untuk visualisasi) ===
+# === Mapping label dan warna ===
 label_map = {'positive': 'Positif', 'negative': 'Negatif'}
 color_map = {'Positif': 'blue', 'Negatif': 'red'}
 
@@ -84,13 +84,14 @@ else:
             if not required_cols.issubset(df.columns):
                 st.error(f"❌ File harus memiliki kolom: {', '.join(required_cols)}.")
             else:
+                # Prediksi
                 X_vec = vectorizer.transform(df['review'].fillna(""))
                 y_pred = model.predict(X_vec)
                 df['predicted_sentiment'] = label_encoder.inverse_transform(y_pred)
 
                 st.success("✅ Prediksi berhasil!")
 
-                # === Filter waktu ===
+                # === Filter Tanggal ===
                 min_date = df['date'].min().date()
                 max_date = df['date'].max().date()
 
@@ -100,6 +101,14 @@ else:
 
                 filtered_df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
 
+                # === Filter Sentimen ===
+                sentiment_option = st.selectbox("🎯 Filter Sentimen:", ["Semua", "Positif", "Negatif"])
+                if sentiment_option == "Positif":
+                    filtered_df = filtered_df[filtered_df['predicted_sentiment'] == "positive"]
+                elif sentiment_option == "Negatif":
+                    filtered_df = filtered_df[filtered_df['predicted_sentiment'] == "negative"]
+
+                # === Tampilkan Tabel ===
                 st.dataframe(
                     filtered_df[['name', 'star_rating', 'date', 'review', 'predicted_sentiment']],
                     use_container_width=True,
@@ -146,7 +155,7 @@ else:
                 ax_pie.axis('equal')
                 st.pyplot(fig_pie)
 
-                # === Download Hasil ===
+                # === Unduh CSV ===
                 csv_result = filtered_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="📥 Unduh Hasil CSV",
