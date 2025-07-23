@@ -1,33 +1,33 @@
 import streamlit as st
 import joblib
 import pandas as pd
-from datetime import datetime
+import matplotlib.pyplot as plt
 import pytz
+from datetime import datetime
 
-# --- Load model dan komponen ---
+# === Load model dan komponen ===
 model = joblib.load('Gradient_Boosting_SMOTE_model_Learn Uke Kala.pkl')
 vectorizer = joblib.load('tfidf_vectorizer_Learn Uke Kala.pkl')
 label_encoder = joblib.load('label_encoder_Learn Uke Kala.pkl')
 
-# --- Judul Aplikasi ---
+# === Judul Aplikasi ===
 st.title("🎵 Aplikasi Analisis Sentimen – Kala: Learn Ukulele & Tuner")
 
-# --- Pilih Mode Input ---
+# === Pilih Mode Input ===
 st.header("📌 Pilih Metode Input")
 input_mode = st.radio("Pilih salah satu:", ["📝 Input Manual", "📁 Upload File CSV"])
 
-# ========================================
-# MODE 1: INPUT MANUAL
-# ========================================
+# === Inisialisasi zona waktu WIB ===
+wib = pytz.timezone("Asia/Jakarta")
+now_wib = datetime.now(wib)
+
+# === MODE 1: INPUT MANUAL ===
 if input_mode == "📝 Input Manual":
     st.subheader("🧾 Masukkan Satu Review Pengguna")
 
     name = st.text_input("👤 Nama Pengguna:")
     star_rating = st.selectbox("⭐ Rating Bintang:", [1, 2, 3, 4, 5])
     user_review = st.text_area("💬 Tulis Review Pengguna:")
-
-    wib = pytz.timezone("Asia/Jakarta")
-    now_wib = datetime.now(wib)
 
     review_day = st.date_input("📅 Tanggal:", value=now_wib.date())
     review_time = st.time_input("⏰ Waktu:", value=now_wib.time())
@@ -63,9 +63,7 @@ if input_mode == "📝 Input Manual":
                 mime="text/csv"
             )
 
-# ========================================
-# MODE 2: UPLOAD CSV
-# ========================================
+# === MODE 2: UPLOAD CSV ===
 else:
     st.subheader("📤 Unggah File CSV Review")
     uploaded_file = st.file_uploader(
@@ -76,6 +74,7 @@ else:
     if uploaded_file:
         try:
             df = pd.read_csv(uploaded_file)
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
 
             required_cols = {'name', 'star_rating', 'date', 'review'}
             if not required_cols.issubset(df.columns):
@@ -86,9 +85,40 @@ else:
                 df['predicted_sentiment'] = label_encoder.inverse_transform(y_pred)
 
                 st.success("✅ Prediksi berhasil!")
-                st.dataframe(df[['name', 'star_rating', 'date', 'review', 'predicted_sentiment']].head())
 
-                csv_result = df.to_csv(index=False).encode('utf-8')
+                # === Filter waktu ===
+                min_date = df['date'].min().date()
+                max_date = df['date'].max().date()
+
+                st.subheader("📅 Filter Rentang Tanggal")
+                start_date = st.date_input("Mulai", min_value=min_date, max_value=max_date, value=min_date)
+                end_date = st.date_input("Selesai", min_value=min_date, max_value=max_date, value=max_date)
+
+                filtered_df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
+
+                st.dataframe(filtered_df[['name', 'star_rating', 'date', 'review', 'predicted_sentiment']].head())
+
+                # === Bar Chart ===
+                st.subheader("📊 Distribusi Sentimen – Bar Chart")
+                bar_data = filtered_df['predicted_sentiment'].value_counts().reset_index()
+                bar_data.columns = ['Sentimen', 'Jumlah']
+                fig_bar, ax_bar = plt.subplots()
+                ax_bar.bar(bar_data['Sentimen'], bar_data['Jumlah'])
+                ax_bar.set_ylabel("Jumlah")
+                ax_bar.set_xlabel("Sentimen")
+                ax_bar.set_title("Distribusi Sentimen")
+                st.pyplot(fig_bar)
+
+                # === Pie Chart ===
+                st.subheader("🧁 Distribusi Sentimen – Pie Chart")
+                pie_data = filtered_df['predicted_sentiment'].value_counts()
+                fig_pie, ax_pie = plt.subplots()
+                ax_pie.pie(pie_data, labels=pie_data.index, autopct='%1.1f%%', startangle=90)
+                ax_pie.axis('equal')
+                st.pyplot(fig_pie)
+
+                # === Download Hasil ===
+                csv_result = filtered_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="📥 Unduh Hasil CSV",
                     data=csv_result,
